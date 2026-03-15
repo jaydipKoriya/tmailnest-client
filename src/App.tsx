@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useLocalStorage } from './hooks/useLocalStorage';
+import { useIndexedDB } from './hooks/useIndexedDB';
 import { INITIAL_MAILBOXES, INITIAL_MESSAGES } from './data/dummyData';
 import { createMailbox } from './services/api';
 import { socketService } from './services/socket';
@@ -13,16 +13,24 @@ import type { Mailbox, Message, MessagesMap, ViewState } from './types';
 import Header from './components/Header';
 
 export default function App() {
-  // Persisted state
-  const [mailboxes, setMailboxes] = useLocalStorage<Mailbox[]>('tempmail_mailboxes', INITIAL_MAILBOXES);
-  const [messages, setMessages] = useLocalStorage<MessagesMap>('tempmail_messages', INITIAL_MESSAGES);
+  // Persisted state using IndexedDB
+  const [mailboxes, setMailboxes, isMailboxesLoaded] = useIndexedDB<Mailbox[]>('tempmail_mailboxes', INITIAL_MAILBOXES);
+  const [messages, setMessages, isMessagesLoaded] = useIndexedDB<MessagesMap>('tempmail_messages', INITIAL_MESSAGES);
+  const isDataLoaded = isMailboxesLoaded && isMessagesLoaded;
 
   // UI state
-  const [activeMailboxId, setActiveMailboxId] = useState<string | null>(mailboxes[0]?.id || null);
+  const [activeMailboxId, setActiveMailboxId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ViewState>('inbox');
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [toast, setToast] = useState({ show: false, message: '', icon: 'check_circle' });
   // const [notification, setNotification] = useState<string | null>(null);
+
+  // Set initial active mailbox once data is loaded
+  useEffect(() => {
+    if (isDataLoaded && !activeMailboxId && mailboxes.length > 0) {
+      setActiveMailboxId(mailboxes[0].id);
+    }
+  }, [isDataLoaded, mailboxes, activeMailboxId]);
 
   // Derived state
   const activeMailbox = mailboxes.find((mb) => mb.id === activeMailboxId) || null;
@@ -83,15 +91,15 @@ export default function App() {
 
   const isInitializing = useRef(false);
 
-  // Initialize first mailbox if none exist
+  // Initialize first mailbox if none exist and data is fully loaded
   useEffect(() => {
-    if (mailboxes.length === 0 && !isInitializing.current) {
+    if (isDataLoaded && mailboxes.length === 0 && !isInitializing.current) {
       isInitializing.current = true;
       handleGenerateNew().finally(() => {
         isInitializing.current = false;
       });
     }
-  }, [mailboxes.length, handleGenerateNew]);
+  }, [isDataLoaded, mailboxes.length, handleGenerateNew]);
 
   // Manage socket connection and subscriptions
   useEffect(() => {
@@ -205,65 +213,67 @@ export default function App() {
     setActiveView(view);
   }, []);
 
+  if (!isDataLoaded) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-zinc-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="size-8 animate-spin rounded-full border-2 border-zinc-800 border-t-zinc-400"></div>
+          <p className="text-sm text-zinc-500 font-medium animate-pulse">Loading mailboxes...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative flex h-screen w-full flex-col overflow-hidden bg-zinc-950">
-      {/* System Notification */}
-      {/* {notification && (
-        <Notification
-          message={notification}
-          onClose={() => setNotification(null)}
-        />
-      )} */}
-
-      {/* Header */}
-      <Header
-        activeView={activeView}
-        selectedMessage={selectedMessage}
-        onBack={handleBack}
-      />
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        {activeView === 'inbox' && (
-          <>
-            <Sidebar
-              activeMailbox={activeMailbox}
-              onCopyAddress={handleCopyAddress}
-              onGenerateNew={handleGenerateNew}
-              onRefresh={handleRefresh}
-              onDelete={handleDeleteMailbox}
-            />
-            <MailList
-              messages={currentMessages}
-              onSelectMessage={handleSelectMessage}
-            />
-          </>
-        )}
-
-        {activeView === 'viewer' && (
-          <MailViewer
-            message={selectedMessage}
+    <div className="relative flex h-[100dvh] w-full flex-col md:flex-row overflow-hidden bg-zinc-950 text-zinc-100">
+      
+      {/* Left Pane: Inbox List */}
+      <div className={`${activeView === 'inbox' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[320px] lg:w-[400px] border-r border-zinc-800 shrink-0 h-full`}>
+        <Header activeView="inbox" selectedMessage={null} onBack={handleBack} />
+        
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <Sidebar
+            activeMailbox={activeMailbox}
+            onCopyAddress={handleCopyAddress}
+            onGenerateNew={handleGenerateNew}
+            onRefresh={handleRefresh}
+            onDelete={handleDeleteMailbox}
           />
-        )}
-      </main>
+          <MailList
+            messages={currentMessages}
+            onSelectMessage={handleSelectMessage}
+          />
+        </main>
 
-      {/* Mailbox Switcher (only in inbox view) */}
-      {activeView === 'inbox' && (
         <MailboxSwitcher
           mailboxes={mailboxes}
           activeMailboxId={activeMailboxId}
           onSwitchMailbox={handleSwitchMailbox}
           onAddMailbox={handleGenerateNew}
         />
-      )}
+        
+        {/* Bottom Nav on Mobile when Inbox (Optional, in original it was hidden, keeping it hidden) */}
+      </div>
 
-      {/* Bottom Navigation (in viewer / history / settings views) */}
-      {activeView !== 'inbox' && (
-        <BottomNav
-          activeView={activeView}
-          onChangeView={handleChangeView}
-        />
-      )}
+      {/* Right Pane: Mail Viewer */}
+      <div className={`${activeView === 'viewer' ? 'flex' : 'hidden'} md:flex flex-col flex-1 h-full min-w-0 bg-zinc-950/30`}>
+        {selectedMessage ? (
+          <>
+            <Header activeView="viewer" selectedMessage={selectedMessage} onBack={handleBack} />
+            <MailViewer message={selectedMessage} />
+          </>
+        ) : (
+          <div className="hidden md:flex flex-1 items-center justify-center">
+            <MailViewer message={null} />
+          </div>
+        )}
+
+        {activeView !== 'inbox' && (
+          <div className="md:hidden mt-auto">
+            <BottomNav activeView={activeView} onChangeView={handleChangeView} />
+          </div>
+        )}
+      </div>
 
       {/* Toast */}
       <Toast

@@ -16,11 +16,11 @@ export default function Header({ activeView, selectedMessage, onBack }: HeaderPr
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="flex items-center justify-center size-8 rounded-lg hover:bg-zinc-900 text-zinc-400 transition-colors"
+            className="md:hidden flex items-center justify-center size-8 rounded-lg hover:bg-zinc-900 text-zinc-400 transition-colors shrink-0"
           >
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h1 className="text-base font-semibold text-zinc-50 truncate max-w-[180px]">
+          <h1 className="text-base font-semibold text-zinc-50 truncate flex-1 min-w-0">
             {selectedMessage.subject}
           </h1>
         </div>
