@@ -29,7 +29,7 @@ function MailboxCard({ mailbox, isActive, onClick }: MailboxCardProps) {
 
   const isWarning = timeLeft < 3600;
   const isExpired = timeLeft <= 0;
-  const username = mailbox.address.split('@')[0];
+  const username = mailbox.address ? mailbox.address.split('@')[0] : 'Unknown';
 
   const dotColor = isActive
     ? 'bg-green-500'
@@ -42,11 +42,10 @@ function MailboxCard({ mailbox, isActive, onClick }: MailboxCardProps) {
   return (
     <div
       onClick={() => onClick(mailbox.id)}
-      className={`flex-shrink-0 w-32 h-12 rounded-md p-2 flex flex-col justify-center relative cursor-pointer transition-colors ${
-        isActive
+      className={`flex-shrink-0 w-32 h-12 rounded-md p-2 flex flex-col justify-center relative cursor-pointer transition-colors ${isActive
           ? 'bg-zinc-800/40 border border-zinc-700'
           : 'bg-zinc-900/40 border border-zinc-800/60 hover:border-zinc-700'
-      }`}
+        }`}
     >
       <span className={`text-[10px] font-medium truncate ${isActive ? 'text-zinc-200' : 'text-zinc-500'}`}>
         {username}

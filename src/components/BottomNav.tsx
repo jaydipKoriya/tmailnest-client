@@ -9,8 +9,6 @@ export default function BottomNav({ activeView, onChangeView }: BottomNavProps) 
   const tabs: Array<{ id: ViewState; icon: string; label: string; filled: boolean }> = [
     { id: 'inbox', icon: 'inbox', label: 'Inbox', filled: false },
     { id: 'viewer', icon: 'mail', label: 'View', filled: true },
-    { id: 'history', icon: 'history', label: 'History', filled: false },
-    { id: 'settings', icon: 'settings', label: 'Settings', filled: false },
   ];
 
   return (

@@ -1,15 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { INITIAL_MAILBOXES, INITIAL_MESSAGES, generateAddress, generateMailboxId } from './data/dummyData';
-import Header from './components/Header';
+import { INITIAL_MAILBOXES, INITIAL_MESSAGES } from './data/dummyData';
+import { createMailbox } from './services/api';
+import { socketService } from './services/socket';
 import Sidebar from './components/Sidebar';
 import MailList from './components/MailList';
 import MailViewer from './components/MailViewer';
 import MailboxSwitcher from './components/MailboxSwitcher';
 import BottomNav from './components/BottomNav';
 import Toast from './components/Toast';
-import Notification from './components/Notification';
 import type { Mailbox, Message, MessagesMap, ViewState } from './types';
+import Header from './components/Header';
 
 export default function App() {
   // Persisted state
@@ -21,7 +22,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<ViewState>('inbox');
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [toast, setToast] = useState({ show: false, message: '', icon: 'check_circle' });
-  const [notification, setNotification] = useState<string | null>(null);
+  // const [notification, setNotification] = useState<string | null>(null);
 
   // Derived state
   const activeMailbox = mailboxes.find((mb) => mb.id === activeMailboxId) || null;
@@ -50,27 +51,92 @@ export default function App() {
     const cleanOtp = otp.replace(/-/g, '');
     navigator.clipboard.writeText(cleanOtp).then(() => {
       showToast('OTP Copied');
-      setNotification(`Your OTP is <span class="font-mono text-emerald-400">${otp}</span>. Copied to clipboard.`);
+      // setNotification(`Your OTP is <span class="font-mono text-emerald-400">${otp}</span>. Copied to clipboard.`);
     }).catch(() => {
       showToast('Failed to copy', 'error');
     });
   }, [showToast]);
 
   // Generate new mailbox
-  const handleGenerateNew = useCallback(() => {
-    const newMailbox = {
-      id: generateMailboxId(),
-      address: generateAddress(),
-      createdAt: Date.now(),
-      expiresIn: 86400,
-    };
-    setMailboxes((prev: Mailbox[]) => [newMailbox, ...prev]);
-    setMessages((prev: MessagesMap) => ({ ...prev, [newMailbox.id]: [] }));
-    setActiveMailboxId(newMailbox.id);
-    setSelectedMessage(null);
-    setActiveView('inbox');
-    showToast('New mailbox created');
+  const handleGenerateNew = useCallback(async () => {
+    try {
+      showToast('Creating new mailbox...', 'sync');
+      const data = await createMailbox();
+
+      const newMailbox = {
+        id: data.name,
+        address: data.email,
+        createdAt: Date.now(),
+        expiresIn: 86400,
+      };
+      setMailboxes((prev: Mailbox[]) => [newMailbox, ...prev]);
+      setMessages((prev: MessagesMap) => ({ ...prev, [newMailbox.id]: [] }));
+      setActiveMailboxId(newMailbox.id);
+      setSelectedMessage(null);
+      setActiveView('inbox');
+      showToast('New mailbox created');
+    } catch (error) {
+      console.error('Failed to create mailbox:', error);
+      showToast('Failed to create mailbox', 'error');
+    }
   }, [setMailboxes, setMessages, showToast]);
+
+  const isInitializing = useRef(false);
+
+  // Initialize first mailbox if none exist
+  useEffect(() => {
+    if (mailboxes.length === 0 && !isInitializing.current) {
+      isInitializing.current = true;
+      handleGenerateNew().finally(() => {
+        isInitializing.current = false;
+      });
+    }
+  }, [mailboxes.length, handleGenerateNew]);
+
+  // Manage socket connection and subscriptions
+  useEffect(() => {
+    if (!activeMailboxId) return;
+
+    socketService.connect();
+    socketService.join(activeMailboxId);
+
+    const handleNewEmail = (emailData: any) => {
+      // console.log('New email received:', emailData);
+
+      const emailFrom = emailData.from || '';
+      const emailMatch = emailFrom.match(/<([^>]+)>/);
+
+      const newMessage: Message = {
+        id: emailData._id || Date.now().toString(),
+        from: emailFrom.replace(/<.*>/, '').replace(/"/g, '').trim() || emailFrom,
+        fromEmail: emailMatch ? emailMatch[1] : emailFrom,
+        to: emailData.to || '',
+        subject: emailData.subject || 'No Subject',
+        preview: emailData.text ? emailData.text.substring(0, 50) + '...' : '',
+        body: emailData.html || emailData.text || '',
+        timestamp: new Date().getTime(),
+        isUnread: true,
+      };
+
+      setMessages((prev: MessagesMap) => {
+        const mailboxMessages = prev[activeMailboxId] || [];
+        if (mailboxMessages.some((m: Message) => m.id === newMessage.id)) return prev;
+
+        return {
+          ...prev,
+          [activeMailboxId]: [newMessage, ...mailboxMessages],
+        };
+      });
+
+      showToast('New email received!', 'mail');
+    };
+
+    socketService.onNewEmail(handleNewEmail);
+
+    return () => {
+      // Cleanup logic if needed
+    };
+  }, [activeMailboxId, setMessages, showToast]);
 
   // Delete mailbox
   const handleDeleteMailbox = useCallback((id: string) => {
@@ -142,12 +208,12 @@ export default function App() {
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden bg-zinc-950">
       {/* System Notification */}
-      {notification && (
+      {/* {notification && (
         <Notification
           message={notification}
           onClose={() => setNotification(null)}
         />
-      )}
+      )} */}
 
       {/* Header */}
       <Header
@@ -178,34 +244,6 @@ export default function App() {
           <MailViewer
             message={selectedMessage}
           />
-        )}
-
-        {activeView === 'history' && (
-          <div className="flex-1 flex flex-col items-center justify-center px-4 animate-fade-in">
-            <div className="text-center space-y-3">
-              <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto">
-                <span className="material-symbols-outlined text-zinc-600" style={{ fontSize: '32px' }}>history</span>
-              </div>
-              <h3 className="text-sm font-semibold text-zinc-400">History</h3>
-              <p className="text-xs text-zinc-600 max-w-[200px]">
-                Your expired mailboxes and past emails will appear here.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {activeView === 'settings' && (
-          <div className="flex-1 flex flex-col items-center justify-center px-4 animate-fade-in">
-            <div className="text-center space-y-3">
-              <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto">
-                <span className="material-symbols-outlined text-zinc-600" style={{ fontSize: '32px' }}>settings</span>
-              </div>
-              <h3 className="text-sm font-semibold text-zinc-400">Settings</h3>
-              <p className="text-xs text-zinc-600 max-w-[200px]">
-                Customize your TempMail experience. Coming soon.
-              </p>
-            </div>
-          </div>
         )}
       </main>
 

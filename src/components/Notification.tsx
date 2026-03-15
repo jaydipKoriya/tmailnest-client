@@ -16,7 +16,7 @@ export default function Notification({ message, onClose }: NotificationProps) {
   };
 
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md animate-slide-down">
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-md animate-slide-down">
       <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 rounded-xl p-3 shadow-2xl flex items-center gap-3 ring-1 ring-white/10">
         <div className="bg-primary/20 p-2 rounded-lg">
           <span className="material-symbols-outlined text-primary text-xl">shield_person</span>

@@ -9,11 +9,11 @@ export interface Message {
   id: string;
   from: string;
   fromEmail: string;
+  to: string;
   subject: string;
   preview: string;
   body: string;
-  timestamp: string;
-  timestampMs: number;
+  timestamp: number;
   isUnread: boolean;
   otp?: string;
 }
@@ -22,4 +22,4 @@ export interface MessagesMap {
   [mailboxId: string]: Message[];
 }
 
-export type ViewState = 'inbox' | 'viewer' | 'history' | 'settings';
+export type ViewState = 'inbox' | 'viewer';

@@ -1,4 +1,5 @@
 import type { Message } from '../types';
+import { formatEmailDate } from '../util';
 
 interface MailListProps {
   messages: Message[];
@@ -57,7 +58,7 @@ export default function MailList({ messages, onSelectMessage }: MailListProps) {
                   </td>
                   <td className="py-4 text-right whitespace-nowrap align-top">
                     <span className={`text-[10px] font-mono ${msg.isUnread ? 'text-blue-500' : 'text-zinc-600'}`}>
-                      {msg.timestamp}
+                      {formatEmailDate(msg.timestamp)}
                     </span>
                   </td>
                 </tr>
